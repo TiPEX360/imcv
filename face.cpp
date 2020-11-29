@@ -20,7 +20,7 @@ using namespace std;
 
 
 /** Global variables */
-cv::String cascade_name = "frontalface.xml";
+cv::String cascade_name = "dartcascade/cascade.xml";
 cv::CascadeClassifier cascade;
 
 
@@ -37,15 +37,17 @@ std::vector<std::string> str_split(const std::string &line, char delimiter) {
 	return tokens;
 }
 
-vector<cv::Rect> readGroundTruth(string path) {
-	ifstream file(path, ifstream::in);
+vector<cv::Rect> readGroundTruths(string truthPath, string imgPath) {
+	ifstream file(truthPath, ifstream::in);
 	string line;
 	
 	vector<cv::Rect> truths;
 	getline(file, line);
 	while(!file.eof()) {
-		vector<string> tokens = str_split(line, ' ');
-		truths.push_back(cv::Rect(stoi(tokens[0]), stoi(tokens[1]), stoi(tokens[2]), stoi(tokens[3])));
+		vector<string> tokens = str_split(line, ',');
+		if(tokens[5].compare(imgPath) == 0) {
+			truths.push_back(cv::Rect(stoi(tokens[1]), stoi(tokens[2]), stoi(tokens[3]), stoi(tokens[4])));
+		}
 		getline(file, line);
 	}
 	file.close();
@@ -73,7 +75,7 @@ float calcIOU(cv::Rect detected, vector<cv::Rect> truths) {
 }
 
 /** @function detectAndDisplay */
-void detectAndDisplay(cv::Mat frame, string truthsPath)
+void detectAndDisplay(cv::Mat frame, string truthsPath, string imgPath)
 {
 	std::vector<cv::Rect> detected;
 	cv::Mat frame_gray;
@@ -90,7 +92,7 @@ void detectAndDisplay(cv::Mat frame, string truthsPath)
 	std::cout << detected.size() << std::endl;
 
 	//Draw ground truth
-	vector<cv::Rect> truths = readGroundTruth(truthsPath);
+	vector<cv::Rect> truths = readGroundTruths(truthsPath, imgPath);
 	for(int i = 0; i < truths.size(); i++) {
 		rectangle(frame, cv::Point(truths[i].x, truths[i].y), cv::Point(truths[i].x + truths[i].width, truths[i].y + truths[i].height), cv::Scalar(0, 0, 255), 2);
 	}
@@ -134,7 +136,7 @@ int main( int argc, const char** argv )
 	if( !cascade.load( cascade_name ) ){ printf("--(!)Error loading\n"); return -1; };
 
 	// 3. Detect Faces and Display Result
-	detectAndDisplay(frame, argv[2]);
+	detectAndDisplay(frame, argv[2], argv[1]);
 
 	// 4. Save Result Image
 	cv::imwrite( "detected.jpg", frame );
