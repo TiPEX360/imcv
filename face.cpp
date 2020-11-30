@@ -126,20 +126,56 @@ void detectAndDisplay(cv::Mat frame, string truthsPath, string imgPath)
 
 }
 
+void sobel(cv::Mat frame) {
+	cv::Mat sobelY(3, 3, CV_8SC1, new signed char[9]{1, -2, -1, 0, 0, 0, 1, 2, 1});
+	cv::Mat sobelx(3, 3, CV_8SC1, new signed char[9]{-1, 0, 1, -2, 0, 2, -1, 0 ,1});
+	cv::Mat result = frame;
+
+	for(int y = 0; y < frame.rows; y++) {
+		for(int x = 0; x < frame.cols; x++) {
+			// Apply kernel
+			int deltaY = 0;
+			int deltaX = 0;
+			for(int j = -1; j < 2; j++) {
+				for(int i = -1; i < 2; i++) {
+					int cell = frame[x + i][y + j].at();
+					deltaY += cell * sobelY;
+					deltaX += cell * sobelX;
+				}
+			}
+		}
+	}
+}
+
 /** @function main */
 int main( int argc, const char** argv )
 {
-    // 1. Read Input Image
-	cv::Mat frame = cv::imread(argv[1], CV_LOAD_IMAGE_COLOR);
-
-	// 2. Load the Strong Classifier in a structure called `Cascade'
 	if( !cascade.load( cascade_name ) ){ printf("--(!)Error loading\n"); return -1; };
 
+	string argv1 = argv[1];		//Run on all images
+	if(argv1.compare("-A") == 0) {
+		for(int i = 0; i < 16; i++) {
+			string outputPath = "./detected/dart" + to_string(i) + ".jpg";
+			string imgPath = "dart" + to_string(i) + ".jpg";
+			cv::Mat frame = cv::imread(imgPath, CV_LOAD_IMAGE_COLOR);
+			detectAndDisplay(frame, argv[2], imgPath);
+			cout << outputPath << endl;
+			cv::imwrite(outputPath, frame);
+		}
+	} 
+	else {
+		// 1. Read Input Image
+		cv::Mat frame = cv::imread(argv[1], CV_LOAD_IMAGE_COLOR);
+
+		// 2. Load the Strong Classifier in a structure called `Cascade'
+		if( !cascade.load( cascade_name ) ){ printf("--(!)Error loading\n"); return -1; };
+		detectAndDisplay(frame, argv[2], argv[1]);
+		cv::imwrite( "detected.jpg", frame );
+	}
+
 	// 3. Detect Faces and Display Result
-	detectAndDisplay(frame, argv[2], argv[1]);
 
 	// 4. Save Result Image
-	cv::imwrite( "detected.jpg", frame );
 
 	return 0;
 }

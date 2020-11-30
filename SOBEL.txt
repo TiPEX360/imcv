@@ -1,0 +1,7 @@
+m = sqrt(dfdx^2 + dfdy^2)
+w = arctan(dfdy/dfdx) df/dx and df/dy are obtained using respective sobel kernels on each pixel of the image.
+o = w - (PI/2)
+
+output image with pixel[x][y] = m[x][y] to test sobel kernel works.
+
+
