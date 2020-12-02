@@ -190,6 +190,21 @@ cv::Mat sobel(cv::Mat frame, cv::Mat* gradient) {
 	return mag;
 }
 
+cv::Mat thresholdFilter(cv::Mat frame, unsigned char low, unsigned char high) {
+	cv::Mat frameCpy = frame.clone();
+	for(int y = 0; y < frame.rows; y++) {
+		for(int x = 0; x < frame.cols; x++) {
+			if(frame.at<uchar>(y, x) < low || frame.at<uchar>(y, x) > high) frameCpy.at<uchar>(y, x) = 0;
+			else frameCpy.at<uchar>(y, x) = 255; 
+		}
+	}
+	return frameCpy;
+}
+
+cv::Mat houghCircle(cv::Mat gradient, int minRad, int maxRad, unsigned char peakThreshold, int minDistance) {
+	cv::Mat houghSpace(gradient.rows, gradient.cols, CV_)
+}
+
 /** @function main */
 int main( int argc, const char** argv )
 {
@@ -214,7 +229,8 @@ int main( int argc, const char** argv )
 		cv::Mat gaussianFrame = gaussian(frame_gray);
 		cv::Mat gradientFrame = frame_gray.clone();
 		cv::Mat sobelFrame = sobel(gaussianFrame, &gradientFrame);
-		cv::imwrite("edges.jpg", sobelFrame);
+		cv::Mat threshold = thresholdFilter(sobelFrame, 100, 255);
+		cv::imwrite("edges.jpg", threshold);
 
 		// 2. Load the Strong Classifier in a structure called `Cascade'
 		if( !cascade.load( cascade_name ) ){ printf("--(!)Error loading\n"); return -1; };
@@ -228,4 +244,3 @@ int main( int argc, const char** argv )
 
 	return 0;
 }
-

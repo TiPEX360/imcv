@@ -1,0 +1,5 @@
+threshold magnitude image
+
+implement hough() to return 3d hough space H(x0, y0, r) ranges 0->255 using threshold image and gradient orientation (where there is 255 in threshold, take diretion of gradient... and do what with it?).
+
+hough(thresholdFrame, gradientFrame, houghPeakThreshold, distanceBetween, minRad, maxRad)
