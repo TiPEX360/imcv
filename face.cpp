@@ -126,25 +126,68 @@ void detectAndDisplay(cv::Mat frame, string truthsPath, string imgPath)
 
 }
 
-void sobel(cv::Mat frame) {
-	cv::Mat sobelY(3, 3, CV_8SC1, new signed char[9]{1, -2, -1, 0, 0, 0, 1, 2, 1});
-	cv::Mat sobelx(3, 3, CV_8SC1, new signed char[9]{-1, 0, 1, -2, 0, 2, -1, 0 ,1});
-	cv::Mat result = frame;
+cv::Mat gaussian(cv::Mat frame) {
 
+	cv::Mat result = frame.clone();
+	cv::Mat kernel(3, 3, CV_8SC1, new signed char[9]{1, 2, 1, 2, 4, 2, 1, 2, 1});
 	for(int y = 0; y < frame.rows; y++) {
 		for(int x = 0; x < frame.cols; x++) {
 			// Apply kernel
-			int deltaY = 0;
-			int deltaX = 0;
+			unsigned int sum = 0;
 			for(int j = -1; j < 2; j++) {
 				for(int i = -1; i < 2; i++) {
-					int cell = frame[x + i][y + j].at();
-					deltaY += cell * sobelY;
-					deltaX += cell * sobelX;
+					int kernelX, kernelY;
+					if((x + i) < 0) kernelX = frame.cols - 1;
+					else if((x + i) == frame.cols) kernelX = 0;
+					else kernelX = x + i;
+					if((y + j) < 0) kernelY = frame.rows - 1;
+					else if((y + j) == frame.rows) kernelY = 0;
+					else kernelY = y + j;
+
+					unsigned char cell = frame.at<uchar>(kernelY, kernelX);//0 - 255
+					sum += (cell * kernel.at<schar>(j + 1, i + 1))/16;//-512 - 512
 				}
+			}
+			result.at<uchar>(y, x) = sum;
+		}
+	}
+	return result;
+}
+
+cv::Mat sobel(cv::Mat frame, cv::Mat* gradient) {
+
+	cv::Mat mag = frame.clone();
+	cv::Mat sobelX(3, 3, CV_8SC1, new signed char[9]{-1, 0, 1, -2, 0, 2, -1, 0, 1});
+	cv::Mat sobelY(3, 3, CV_8SC1, new signed char[9]{-1, -2, -1, 0, 0, 0, 1, 2, 1});
+	for(int y = 0; y < frame.rows; y++) {
+		for(int x = 0; x < frame.cols; x++) {
+			// Apply kernel
+			signed int deltaY = 0;
+			signed int deltaX = 0;
+			for(int j = -1; j < 2; j++) {
+				for(int i = -1; i < 2; i++) {
+					int kernelX, kernelY;
+					if((x + i) < 0) kernelX = frame.cols - 1;
+					else if((x + i) == frame.cols) kernelX = 0;
+					else kernelX = x + i;
+					if((y + j) < 0) kernelY = frame.rows - 1;
+					else if((y + j) == frame.rows) kernelY = 0;
+					else kernelY = y + j;
+
+					unsigned char cell = frame.at<uchar>(kernelY, kernelX);//0 - 255
+					deltaY += cell * sobelY.at<schar>(j + 1, i + 1);//-512 - 512
+					deltaX += cell * sobelX.at<schar>(j + 1, i + 1);//-512 - 512
+				}
+			}
+			uchar magnitude = sqrt(pow(deltaY, 2) + pow(deltaX, 2));
+			float w = cvFastArctan(deltaY, deltaX) * (255.0f/360.0f);
+			mag.at<uchar>(y, x) = magnitude;
+			if(gradient != NULL) {
+				gradient->at<uchar>(y, x) = w;
 			}
 		}
 	}
+	return mag;
 }
 
 /** @function main */
@@ -166,6 +209,12 @@ int main( int argc, const char** argv )
 	else {
 		// 1. Read Input Image
 		cv::Mat frame = cv::imread(argv[1], CV_LOAD_IMAGE_COLOR);
+		cv::Mat frame_gray;
+		cv::cvtColor( frame, frame_gray, CV_BGR2GRAY );
+		cv::Mat gaussianFrame = gaussian(frame_gray);
+		cv::Mat gradientFrame = frame_gray.clone();
+		cv::Mat sobelFrame = sobel(gaussianFrame, &gradientFrame);
+		cv::imwrite("edges.jpg", sobelFrame);
 
 		// 2. Load the Strong Classifier in a structure called `Cascade'
 		if( !cascade.load( cascade_name ) ){ printf("--(!)Error loading\n"); return -1; };
