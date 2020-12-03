@@ -161,29 +161,33 @@ cv::Mat sobel(cv::Mat frame, cv::Mat* gradient) {
 	cv::Mat sobelY(3, 3, CV_8SC1, new signed char[9]{-1, -2, -1, 0, 0, 0, 1, 2, 1});
 	for(int y = 0; y < frame.rows; y++) {
 		for(int x = 0; x < frame.cols; x++) {
-			// Apply kernel
-			signed int deltaY = 0;
-			signed int deltaX = 0;
-			for(int j = -1; j < 2; j++) {
-				for(int i = -1; i < 2; i++) {
-					int kernelX, kernelY;
-					if((x + i) < 0) kernelX = frame.cols - 1;
-					else if((x + i) == frame.cols) kernelX = 0;
-					else kernelX = x + i;
-					if((y + j) < 0) kernelY = frame.rows - 1;
-					else if((y + j) == frame.rows) kernelY = 0;
-					else kernelY = y + j;
+			if(y > 0 && y < frame.rows - 1 && x > 0 && x < frame.cols - 1) {
+				// Apply kernel
+				signed int deltaY = 0;
+				signed int deltaX = 0;
+				for(int j = -1; j < 2; j++) {
+					for(int i = -1; i < 2; i++) {
+						int kernelX, kernelY;
+						if((x + i) < 0) kernelX = frame.cols - 1;
+						else if((x + i) == frame.cols) kernelX = 0;
+						else kernelX = x + i;
+						if((y + j) < 0) kernelY = frame.rows - 1;
+						else if((y + j) == frame.rows) kernelY = 0;
+						else kernelY = y + j;
 
-					unsigned char cell = frame.at<uchar>(kernelY, kernelX);//0 - 255
-					deltaY += cell * sobelY.at<schar>(j + 1, i + 1);//-512 - 512
-					deltaX += cell * sobelX.at<schar>(j + 1, i + 1);//-512 - 512
+						unsigned char cell = frame.at<uchar>(kernelY, kernelX);//0 - 255
+						deltaY += cell * sobelY.at<schar>(j + 1, i + 1);//-512 - 512
+						deltaX += cell * sobelX.at<schar>(j + 1, i + 1);//-512 - 512
+					}
 				}
-			}
-			uchar magnitude = sqrt(pow(deltaY, 2) + pow(deltaX, 2));
-			float w = cvFastArctan(deltaY, deltaX) * (255.0f/360.0f);
-			mag.at<uchar>(y, x) = magnitude;
-			if(gradient != NULL) {
-				gradient->at<uchar>(y, x) = w;
+				uchar magnitude = sqrt(pow(deltaY, 2) + pow(deltaX, 2));
+				float w = cvFastArctan(deltaY, deltaX) * (255.0f/360.0f);
+				mag.at<uchar>(y, x) = magnitude;
+				if(gradient != NULL) {
+					gradient->at<uchar>(y, x) = w;
+				}
+			} else {
+				mag.at<uchar>(y, x) = 0;
 			}
 		}
 	}
@@ -201,8 +205,69 @@ cv::Mat thresholdFilter(cv::Mat frame, unsigned char low, unsigned char high) {
 	return frameCpy;
 }
 
-cv::Mat houghCircle(cv::Mat gradient, int minRad, int maxRad, unsigned char peakThreshold, int minDistance) {
-	cv::Mat houghSpace(gradient.rows, gradient.cols, CV_)
+vector<array<int, 3>> houghCircle(cv::Mat edges, cv::Mat gradient, int minRad, int maxRad, unsigned char peakThreshold, int minDistance) {
+	cv::Mat houghSpace(3, new int[3]{gradient.rows, gradient.cols, maxRad - minRad + 1}, CV_32SC1, cv::Scalar::all(0)); // need +1?
+
+	int maxPeak = 0;
+	int circles = 0;
+	for(int gY = 0; gY < gradient.rows; gY++) {
+		for(int gX = 0; gX < gradient.cols; gX++) {
+			if(edges.at<uchar>(gY, gX) = 255) {
+				float theta = gradient.at<uchar>(gY, gX) * (360.0f/255.0f);
+				cout << theta << endl;
+				//cycle through all possible circle radii
+				for(int r = minRad; r < maxRad; r++) {
+					//increment all circles going through this point in hough space
+					// for(int hY; hY < houghSpace.rows; hY++) {
+					// 	for(int hX; hX < houghSpace.cols; hX++) {
+					// 		if(r == sqrt(pow(hX - gX, 2)) + pow(hY - gY, 2)) {
+					// 			houghSpace.at<unsigned int>(hY, hX, r) += 1;
+					// 		}
+					// 	} 
+					// }
+
+					// for(int t = 0; t < 360; t++) {
+						float a0 = gX + r * cos(theta * CV_PI / 180);
+						float b0 = gY + r * sin(theta * CV_PI / 180);
+						float a1 = gX - r * cos(theta * CV_PI / 180);
+						float b1 = gY - r * sin(theta * CV_PI / 180);
+						// cout << a0 << " " << b0 << endl;
+						if((b0 >= 0 && b0 < gradient.rows) && (a0 >= 0 && a0 < gradient.cols)) {
+							houghSpace.at<unsigned int>(b0, a0, r - minRad) += 1;
+							if(houghSpace.at<unsigned int>(b0, a0, r - minRad) > maxPeak) maxPeak = houghSpace.at<unsigned int>(b0, a0, r - minRad);
+							// cout << b0 << " " << a0 << endl;
+							circles++;
+						}
+						if((b1 >= 0 && b1 < gradient.rows) && (a1 >= 0 && a1 < gradient.cols)) {
+							houghSpace.at<unsigned int>(b1, a1, r - minRad) += 1;
+							if(houghSpace.at<unsigned int>(b1, a1, r - minRad) > maxPeak) maxPeak = houghSpace.at<unsigned int>(b1, a1, r - minRad);
+							circles++;
+						}
+					// }
+				}
+			}
+		}
+	}
+	cout << maxPeak << endl;
+	cout << circles << endl;
+	//normalize and find peaks
+	vector<array<int, 3>> peaks;
+
+	for(int b = 0; b < gradient.rows; b++) {
+		for(int a = 0; a < gradient.cols; a++) {
+			for(int r = minRad; r < maxRad; r++) {
+				//normalize
+				// float scale = 255.0f / (float)maxPeak;
+				// cout << scale << endl;
+				houghSpace.at<unsigned int>(b, a, r - minRad) *= 255.0f / (float)maxPeak;
+				// if(houghSpace.at<unsigned int>(b, a, r - minRad) > 0) cout << houghSpace.at<unsigned int>(b, a, r - minRad);
+				//find peak
+				if(houghSpace.at<unsigned int>(b, a, r - minRad) > peakThreshold) peaks.push_back(array<int, 3>{b, a, r});
+			}
+		}
+	}
+
+	return peaks;
 }
 
 /** @function main */
@@ -229,7 +294,11 @@ int main( int argc, const char** argv )
 		cv::Mat gaussianFrame = gaussian(frame_gray);
 		cv::Mat gradientFrame = frame_gray.clone();
 		cv::Mat sobelFrame = sobel(gaussianFrame, &gradientFrame);
-		cv::Mat threshold = thresholdFilter(sobelFrame, 100, 255);
+		cv::Mat threshold = thresholdFilter(sobelFrame, 120, 255);
+		vector<array<int, 3>> circles = houghCircle(threshold, gradientFrame, 200, 500, 250, 0);
+		// cout << circles.size() << endl;
+		// cv::circle(frame, cv::Point(circles[10][0], circles[10][1]), circles[10][2], cv::Scalar(0, 0, 255));
+
 		cv::imwrite("edges.jpg", threshold);
 
 		// 2. Load the Strong Classifier in a structure called `Cascade'
