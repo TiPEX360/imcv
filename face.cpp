@@ -210,40 +210,28 @@ vector<array<int, 3>> houghCircle(cv::Mat edges, cv::Mat gradient, int minRad, i
 
 	int maxPeak = 0;
 	int circles = 0;
-	for(int gY = 0; gY < gradient.rows; gY++) {
-		for(int gX = 0; gX < gradient.cols; gX++) {
-			if(edges.at<uchar>(gY, gX) = 255) {
+	for(int gY = 5; gY < gradient.rows - 5; gY++) {
+		for(int gX = 5; gX < gradient.cols - 5; gX++) {
+			if(edges.at<uchar>(gY, gX) == 255) {
 				float theta = gradient.at<uchar>(gY, gX) * (360.0f/255.0f);
-				cout << theta << endl;
-				//cycle through all possible circle radii
-				for(int r = minRad; r < maxRad; r++) {
-					//increment all circles going through this point in hough space
-					// for(int hY; hY < houghSpace.rows; hY++) {
-					// 	for(int hX; hX < houghSpace.cols; hX++) {
-					// 		if(r == sqrt(pow(hX - gX, 2)) + pow(hY - gY, 2)) {
-					// 			houghSpace.at<unsigned int>(hY, hX, r) += 1;
-					// 		}
-					// 	} 
-					// }
+				for(int r = minRad; r <= maxRad; r++) {
 
-					// for(int t = 0; t < 360; t++) {
-						float a0 = gX + r * cos(theta * CV_PI / 180);
-						float b0 = gY + r * sin(theta * CV_PI / 180);
-						float a1 = gX - r * cos(theta * CV_PI / 180);
-						float b1 = gY - r * sin(theta * CV_PI / 180);
-						// cout << a0 << " " << b0 << endl;
-						if((b0 >= 0 && b0 < gradient.rows) && (a0 >= 0 && a0 < gradient.cols)) {
-							houghSpace.at<unsigned int>(b0, a0, r - minRad) += 1;
-							if(houghSpace.at<unsigned int>(b0, a0, r - minRad) > maxPeak) maxPeak = houghSpace.at<unsigned int>(b0, a0, r - minRad);
-							// cout << b0 << " " << a0 << endl;
-							circles++;
-						}
-						if((b1 >= 0 && b1 < gradient.rows) && (a1 >= 0 && a1 < gradient.cols)) {
-							houghSpace.at<unsigned int>(b1, a1, r - minRad) += 1;
-							if(houghSpace.at<unsigned int>(b1, a1, r - minRad) > maxPeak) maxPeak = houghSpace.at<unsigned int>(b1, a1, r - minRad);
-							circles++;
-						}
-					// }
+					float a0 = gX + r * cos(theta * CV_PI / 180);
+					float b0 = gY + r * sin(theta * CV_PI / 180);
+					float a1 = gX - r * cos(theta * CV_PI / 180);
+					float b1 = gY - r * sin(theta * CV_PI / 180);
+					// cout << a0 << " " << b0 << endl;
+					if((b0 >= 0 && b0 < gradient.rows) && (a0 >= 0 && a0 < gradient.cols)) {
+						houghSpace.at<signed int>(b0, a0, r - minRad) += 1;
+						if(houghSpace.at<signed int>(b0, a0, r - minRad) > maxPeak) maxPeak = houghSpace.at<signed int>(b0, a0, r - minRad);
+						// cout << b0 << " " << a0 << endl;
+						circles++;
+					}
+					if((b1 >= 0 && b1 < gradient.rows) && (a1 >= 0 && a1 < gradient.cols)) {
+						houghSpace.at<signed int>(b1, a1, r - minRad) += 1;
+						if(houghSpace.at<signed int>(b1, a1, r - minRad) > maxPeak) maxPeak = houghSpace.at<signed int>(b1, a1, r - minRad);
+						circles++;
+					}
 				}
 			}
 		}
@@ -257,12 +245,9 @@ vector<array<int, 3>> houghCircle(cv::Mat edges, cv::Mat gradient, int minRad, i
 		for(int a = 0; a < gradient.cols; a++) {
 			for(int r = minRad; r < maxRad; r++) {
 				//normalize
-				// float scale = 255.0f / (float)maxPeak;
-				// cout << scale << endl;
-				houghSpace.at<unsigned int>(b, a, r - minRad) *= 255.0f / (float)maxPeak;
-				// if(houghSpace.at<unsigned int>(b, a, r - minRad) > 0) cout << houghSpace.at<unsigned int>(b, a, r - minRad);
+				houghSpace.at<signed int>(b, a, r - minRad) *= 255.0f / (float)maxPeak;
 				//find peak
-				if(houghSpace.at<unsigned int>(b, a, r - minRad) > peakThreshold) peaks.push_back(array<int, 3>{b, a, r});
+				if(houghSpace.at<signed int>(b, a, r - minRad) > peakThreshold) peaks.push_back(array<int, 3>{b, a, r});
 			}
 		}
 	}
@@ -291,15 +276,19 @@ int main( int argc, const char** argv )
 		cv::Mat frame = cv::imread(argv[1], CV_LOAD_IMAGE_COLOR);
 		cv::Mat frame_gray;
 		cv::cvtColor( frame, frame_gray, CV_BGR2GRAY );
+		// equalizeHist( frame_gray, frame_gray );
+		//TRY NORMALISING HISTOGRAM FIRST!
 		cv::Mat gaussianFrame = gaussian(frame_gray);
 		cv::Mat gradientFrame = frame_gray.clone();
 		cv::Mat sobelFrame = sobel(gaussianFrame, &gradientFrame);
-		cv::Mat threshold = thresholdFilter(sobelFrame, 120, 255);
-		vector<array<int, 3>> circles = houghCircle(threshold, gradientFrame, 200, 500, 250, 0);
-		// cout << circles.size() << endl;
-		// cv::circle(frame, cv::Point(circles[10][0], circles[10][1]), circles[10][2], cv::Scalar(0, 0, 255));
-
+		cv::Mat threshold = thresholdFilter(sobelFrame, 200, 255);
+		vector<array<int, 3>> circles = houghCircle(threshold, gradientFrame, 0, 500, 160, 0);
+		cout << circles.size() << endl;
+		for(int i = 0; i < circles.size(); i++) {
+			cv::circle(frame, cv::Point(circles[i][1], circles[i][0]), circles[i][2], cv::Scalar(255, 0, 0), 5);
+		}
 		cv::imwrite("edges.jpg", threshold);
+
 
 		// 2. Load the Strong Classifier in a structure called `Cascade'
 		if( !cascade.load( cascade_name ) ){ printf("--(!)Error loading\n"); return -1; };
