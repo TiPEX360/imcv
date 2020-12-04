@@ -251,40 +251,47 @@ vector<array<int, 3>> houghCircle(cv::Mat edges, cv::Mat gradient, int minRad, i
 }
 
 vector<array<int, 2>> houghLines(cv::Mat edges, unsigned char peakThreshold) {
-	cv::Mat houghSpace(2, new int[2]{max(edges.rows, edges.cols), 360}, CV_32SC1, cv::Scalar::all(0)); // need +1?
+	int dist = ceil(sqrt(pow(edges.rows, 2) + pow(edges.cols, 2)));
+	cv::Mat houghSpace(2, new int[2]{2*dist, max(360, 2*dist)}, CV_32SC1, cv::Scalar::all(0)); // need +1?
 
 	int maxPeak = 0;
 	for(int gY = 5; gY < edges.rows - 5; gY++) {
 		for(int gX = 5; gX < edges.cols - 5; gX++) {
 			if(edges.at<uchar>(gY, gX) == 255) {
-				// for(int row = 0; row < edges.rows; row++) {
-				// 	for(int theta = 0; theta < edges.cols; theta++) {
 
-				// 	}
-				// }
-				for(int t = 0; t < 180; t++) {
-					float theta = t;
+				for(int t = 0; t < houghSpace.cols; t++) {
+					float theta = t * 360/houghSpace.cols;
 					float rho = gX*cos(theta * CV_PI / 180.0f) + gY*sin(theta * CV_PI/180.0f);
-					if( rho < 0) {
-						rho *= -1;
-						theta = 180 + theta;
-					}
-					// cout << rho << " " << theta << endl;
-					houghSpace.at<signed int>((int)floor(rho), (int)round(theta)) += 1;
-					if(houghSpace.at<signed int>(rho, theta) > maxPeak) maxPeak = houghSpace.at<signed int>(rho, theta);
-					// cout << rho << " " << theta << endl;
+					// if( rho < 0) {
+					// 	rho *= -1;
+					// 	theta += 180;
+					// }
+					houghSpace.at<signed int>((int)floor(rho) + dist, t) += 1;
+					if(houghSpace.at<signed int>(rho + dist, t) > maxPeak) maxPeak = houghSpace.at<signed int>(rho + dist, t);
 				}
 			}
 		}	
 	}
+	// cout << maxRho << endl;
+	unsigned int peak = (int)peakThreshold * (float)maxPeak/255.0f;
+	cout << peak << endl;
 	vector<array<int, 2>> lines;
 	for(int r = 0; r < houghSpace.rows; r++) {
 		for(int t = 0; t < houghSpace.cols; t++) {
-			houghSpace.at<signed int>(r, t) *= 255.0f / (float)maxPeak;
-			if(houghSpace.at<signed int>(r, t) > peakThreshold) lines.push_back(array<int, 2>{r, t});
+			if(houghSpace.at<signed int>(r, t) > peakThreshold) lines.push_back(array<int, 2>{r - dist, t * 360/houghSpace.cols});
 		}
 	}
+	// cv::cvtColor(houghSpace, )
+	imwrite("hough.jpg", houghSpace);
 	return lines;
+}
+
+array<cv::Point, 2> lineToPoints(array<int, 2> line, int x0, int x1) {
+	float m = -1/tan((float)line[1] * CV_PI/180.0f);
+	float c = (float)line[0] * (1/sin((float)line[1]* CV_PI/180.0f));
+	cv::Point p0(x0, m*x0 + c);
+	cv::Point p1(x1, m*x1 + c);
+	return array<cv::Point, 2>{p0, p1};
 }
 
 /** @function main */
@@ -313,16 +320,17 @@ int main( int argc, const char** argv )
 		cv::Mat gaussianFrame = gaussian(frame_gray);
 		cv::Mat gradientFrame = frame_gray.clone();
 		cv::Mat sobelFrame = sobel(gaussianFrame, &gradientFrame);
-		cv::Mat threshold = thresholdFilter(sobelFrame, 200, 255);
+		cv::Mat threshold = thresholdFilter(sobelFrame, 130, 255);
 
 		// vector<array<int, 3>> circles = houghCircle(threshold, gradientFrame, 0, 500, 160, 0);
 		// for(int i = 0; i < circles.size(); i++) {
 		// 	cv::circle(frame, cv::Point(circles[i][1], circles[i][0]), circles[i][2], cv::Scalar(255, 0, 0), 5);
 		// }
-		vector<array<int, 2>> lines = houghLines(threshold, 200);
-		// for(int i = 0; i < lines.size(); i++) {
-		// 	// cout << lines[i][0] << " " << lines[i][1] << endl;
-		// }
+		vector<array<int, 2>> lines = houghLines(threshold, 170);
+		for(int i = 0; i < lines.size(); i++) {
+			array<cv::Point, 2> points = lineToPoints(lines[i], 0, frame.cols - 1);
+			cv::line(frame, points[0], points[1], cv::Scalar(255, 0, 0), 5);
+		}
 		cv::imwrite("edges.jpg", threshold);
 
 
