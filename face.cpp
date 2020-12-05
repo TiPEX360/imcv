@@ -130,28 +130,31 @@ void detectAndDisplay(cv::Mat frame, string truthsPath, string imgPath)
 cv::Mat gaussian(cv::Mat frame) {
 
 	cv::Mat result = frame.clone();
-	cv::Mat kernel(3, 3, CV_8SC1, new signed char[9]{1, 2, 1, 2, 4, 2, 1, 2, 1});
+	// cv::Mat kernel(3, 3, CV_8SC1, new signed char[9]{1, 2, 1, 2, 4, 2, 1, 2, 1});
+	cv::Mat kernel(5, 5, CV_8SC1, new signed char[25]{2, 4, 5, 2, 2, 4, 9, 12, 9, 4, 5, 12, 15, 12, 5, 4, 9, 12, 9, 4, 2, 4, 5, 4, 2});
+	
 	for(int y = 0; y < frame.rows; y++) {
 		for(int x = 0; x < frame.cols; x++) {
 			// Apply kernel
 			unsigned int sum = 0;
-			for(int j = -1; j < 2; j++) {
-				for(int i = -1; i < 2; i++) {
+			for(int j = -2; j < 3; j++) {
+				for(int i = -2; i < 3; i++) {
 					int kernelX, kernelY;
-					if((x + i) < 0) kernelX = frame.cols - 1;
-					else if((x + i) == frame.cols) kernelX = 0;
+					if((x + i) < 0) kernelX = frame.cols - (x + i);
+					else if((x + i) >= frame.cols) kernelX = (x + i - frame.cols);
 					else kernelX = x + i;
-					if((y + j) < 0) kernelY = frame.rows - 1;
-					else if((y + j) == frame.rows) kernelY = 0;
+					if((y + j) < 0) kernelY = frame.rows - (y + j);
+					else if((y + j) >= frame.rows) kernelY = (y + j - frame.rows);
 					else kernelY = y + j;
 
 					unsigned char cell = frame.at<uchar>(kernelY, kernelX);//0 - 255
-					sum += (cell * kernel.at<schar>(j + 1, i + 1))/16;//-512 - 512
+					sum += (cell * kernel.at<schar>(j + 1, i + 1))/159;//-512 - 512
 				}
 			}
 			result.at<uchar>(y, x) = sum;
 		}
 	}
+	imwrite("gaussian.jpg", result);
 	return result;
 }
 
@@ -160,12 +163,17 @@ cv::Mat sobel(cv::Mat frame, cv::Mat* gradient) {
 	cv::Mat mag = frame.clone();
 	cv::Mat sobelX(3, 3, CV_8SC1, new signed char[9]{-1, 0, 1, -2, 0, 2, -1, 0, 1});
 	cv::Mat sobelY(3, 3, CV_8SC1, new signed char[9]{-1, -2, -1, 0, 0, 0, 1, 2, 1});
+	// cv::Mat sobelXY(3, 3, CV_8SC1, new signed char[9]{-2, -1, 0, -1, 0, 1, 0, 1, 2});
+	// cv::Mat sobelYX(3, 3, CV_8SC1, new signed char[9]{0, 1, 2, -1, 0, 1, -2, -1, 0});
+	
 	for(int y = 0; y < frame.rows; y++) {
 		for(int x = 0; x < frame.cols; x++) {
 			if(y > 0 && y < frame.rows - 1 && x > 0 && x < frame.cols - 1) {
 				// Apply kernel
 				signed int deltaY = 0;
 				signed int deltaX = 0;
+				// signed int deltaYX = 0;
+				// signed int deltaXY = 0;
 				for(int j = -1; j < 2; j++) {
 					for(int i = -1; i < 2; i++) {
 						int kernelX, kernelY;
@@ -179,31 +187,96 @@ cv::Mat sobel(cv::Mat frame, cv::Mat* gradient) {
 						unsigned char cell = frame.at<uchar>(kernelY, kernelX);//0 - 255
 						deltaY += cell * sobelY.at<schar>(j + 1, i + 1);//-512 - 512
 						deltaX += cell * sobelX.at<schar>(j + 1, i + 1);//-512 - 512
+						// deltaYX += cell * sobelYX.at<schar>(j + 1, i + 1);
+						// deltaXY += cell * sobelXY.at<schar>(j + 1, i + 1);
 					}
 				}
+				// uchar magnitude = sqrt(pow(deltaY, 2) + pow(deltaX, 2) + pow(deltaYX, 2) + pow(deltaXY, 2));
 				uchar magnitude = sqrt(pow(deltaY, 2) + pow(deltaX, 2));
-				float w = cvFastArctan(deltaY, deltaX) * (255.0f/360.0f);
+				
+				float w = cvFastArctan(deltaY, deltaX); //float angle 0 -> 360
+				w = (int)round(w/45.0f)*45.0f; // float 45 multiple
+				// float w2 = cvFastArctan(deltaYX, deltaXY) * (255.0f/360.0f);
+				
 				mag.at<uchar>(y, x) = magnitude;
-				if(gradient != NULL) {
-					gradient->at<uchar>(y, x) = w;
-				}
+				if(gradient != NULL) gradient->at<signed int>(y, x) = (signed int)w;
 			} else {
 				mag.at<uchar>(y, x) = 0;
 			}
 		}
 	}
+	if(gradient != NULL) imwrite("gradient.jpg", *gradient);
+	imwrite("sobel.jpg", mag);
 	return mag;
 }
 
-cv::Mat thresholdFilter(cv::Mat frame, unsigned char low, unsigned char high) {
+cv::Mat doubleThreshold(cv::Mat frame, unsigned char low, unsigned char high) {
 	cv::Mat frameCpy = frame.clone();
 	for(int y = 0; y < frame.rows; y++) {
 		for(int x = 0; x < frame.cols; x++) {
-			if(frame.at<uchar>(y, x) < low || frame.at<uchar>(y, x) > high) frameCpy.at<uchar>(y, x) = 0;
+			if(frame.at<uchar>(y, x) < low) frameCpy.at<uchar>(y, x) = 0;
+			else if(frame.at<uchar>(y, x) < high) frameCpy.at<uchar>(y, x) = 127;
 			else frameCpy.at<uchar>(y, x) = 255; 
 		}
 	}
+	imwrite("threshold.jpg", frameCpy);
 	return frameCpy;
+}
+
+cv::Mat nonMaxSuppression(cv::Mat frame, cv::Mat gradient) {
+	cv::Mat edges = frame.clone();
+	enum dir {EAST, SOUTHEAST, SOUTH, SOUTHWEST};
+	for(int y = 1; y < edges.rows - 1; y++) {
+		for(int x = 1; x < edges.cols - 1; x++) {
+			char pixel = edges.at<uchar>(y, x);
+			signed int g = (gradient.at<signed int>(y, x) / 45) % 4;
+			// cout << g << endl;
+			switch(g) {
+				case EAST:
+					if(!(pixel > edges.at<uchar>(y, x+1) && pixel > edges.at<uchar>(y, x-1))) edges.at<uchar>(y, x) = 0;
+					// else edges.at<uchar>(y, x) = 0;
+					break;
+				case SOUTHEAST:
+					if(!(pixel > edges.at<uchar>(y+1, x+1) && pixel > edges.at<uchar>(y-1, x-1))) edges.at<uchar>(y, x) = 0;
+					// else edges.at<uchar>(y, x) = 0;
+					break;
+				case SOUTH:
+					if(!(pixel > edges.at<uchar>(y+1, x) && pixel > edges.at<uchar>(y-1, x))) edges.at<uchar>(y, x) = 0;
+					// else edges.at<uchar>(y, x) = 0;
+					break;
+				case SOUTHWEST:
+					if(!(pixel > edges.at<uchar>(y+1, x-1) && pixel > edges.at<uchar>(y-1, x+1))) edges.at<uchar>(y, x) = 0;
+					// else edges.at<uchar>(y, x) = 0;
+					break;
+				default:
+					break;
+			};
+		}
+	}
+	imwrite("suppression.jpg", edges);
+	return edges;
+}
+
+cv::Mat hysterise(cv::Mat frame) {
+	cv::Mat hyst = frame.clone();
+	for(int y = 1; y < hyst.cols - 1; y++) {
+		for(int x = 1; x < hyst.rows - 1; x++) {
+			unsigned char pixel = frame.at<uchar>(y, x);
+			if(pixel == 127) {
+				bool found = false;
+				for(int j = -1; j < 2 && !found; j++) {
+					for(int i = -1; i < 2 && !found; i++) {
+						if(frame.at<uchar>(y + j, x + i) == 255) found = true;
+						hyst.at<uchar>(y, x) = 255;
+					}
+				}
+				if(!found) hyst.at<uchar>(y, x) = 0;
+				
+			}
+		}
+	}
+	imwrite("hyst.jpg", hyst);
+	return hyst;
 }
 
 vector<array<int, 3>> houghCircle(cv::Mat edges, cv::Mat gradient, int minRad, int maxRad, unsigned char peakThreshold, int minDistance) {
@@ -213,7 +286,7 @@ vector<array<int, 3>> houghCircle(cv::Mat edges, cv::Mat gradient, int minRad, i
 	for(int gY = 5; gY < gradient.rows - 5; gY++) {
 		for(int gX = 5; gX < gradient.cols - 5; gX++) {
 			if(edges.at<uchar>(gY, gX) == 255) {
-				float theta = gradient.at<uchar>(gY, gX) * (360.0f/255.0f);
+				float theta = gradient.at<signed int>(gY, gX);
 				for(int r = minRad; r <= maxRad; r++) {
 
 					float a0 = gX + r * cos(theta * CV_PI / 180.0f);
@@ -250,35 +323,31 @@ vector<array<int, 3>> houghCircle(cv::Mat edges, cv::Mat gradient, int minRad, i
 	return peaks;
 }
 
-vector<array<int, 2>> houghLines(cv::Mat edges, unsigned char peakThreshold) {
+vector<array<int, 2>> houghLines(cv::Mat edges, cv::Mat gradient, unsigned char peakThreshold) {
 	int dist = ceil(sqrt(pow(edges.rows, 2) + pow(edges.cols, 2)));
-	cv::Mat houghSpace(2, new int[2]{2*dist, max(360, 2*dist)}, CV_32SC1, cv::Scalar::all(0)); // need +1?
+	cv::Mat houghSpace(2, new int[2]{2*dist, 360}, CV_32SC1, cv::Scalar::all(0)); // need +1?
 
 	int maxPeak = 0;
 	for(int gY = 5; gY < edges.rows - 5; gY++) {
 		for(int gX = 5; gX < edges.cols - 5; gX++) {
 			if(edges.at<uchar>(gY, gX) == 255) {
 
-				for(int t = 0; t < houghSpace.cols; t++) {
-					float theta = t * 360/houghSpace.cols;
+				int direction = gradient.at<signed int>(gY, gX);
+				for(int theta = direction - 17; theta < direction + 17; theta++) {
 					float rho = gX*cos(theta * CV_PI / 180.0f) + gY*sin(theta * CV_PI/180.0f);
-					// if( rho < 0) {
-					// 	rho *= -1;
-					// 	theta += 180;
-					// }
-					houghSpace.at<signed int>((int)floor(rho) + dist, t) += 1;
-					if(houghSpace.at<signed int>(rho + dist, t) > maxPeak) maxPeak = houghSpace.at<signed int>(rho + dist, t);
+					houghSpace.at<signed int>((int)floor(rho) + dist, theta) += 1;
+					if(houghSpace.at<signed int>(rho + dist, theta) > maxPeak) maxPeak = houghSpace.at<signed int>(rho + dist, theta);
 				}
 			}
 		}	
 	}
 	// cout << maxRho << endl;
-	unsigned int peak = (int)peakThreshold * (float)maxPeak/255.0f;
-	cout << peak << endl;
+	unsigned int threshold = (int)peakThreshold * (float)maxPeak/255.0f;
+
 	vector<array<int, 2>> lines;
 	for(int r = 0; r < houghSpace.rows; r++) {
 		for(int t = 0; t < houghSpace.cols; t++) {
-			if(houghSpace.at<signed int>(r, t) > peakThreshold) lines.push_back(array<int, 2>{r - dist, t * 360/houghSpace.cols});
+			if(houghSpace.at<signed int>(r, t) > threshold) lines.push_back(array<int, 2>{r - dist, t});
 		}
 	}
 	// cv::cvtColor(houghSpace, )
@@ -318,20 +387,21 @@ int main( int argc, const char** argv )
 		// equalizeHist( frame_gray, frame_gray );
 		//TRY NORMALISING HISTOGRAM FIRST!
 		cv::Mat gaussianFrame = gaussian(frame_gray);
-		cv::Mat gradientFrame = frame_gray.clone();
+		cv::Mat gradientFrame(2, new int[2]{frame.rows, frame.cols}, CV_32SC1, cv::Scalar::all(0));
 		cv::Mat sobelFrame = sobel(gaussianFrame, &gradientFrame);
-		cv::Mat threshold = thresholdFilter(sobelFrame, 130, 255);
-
-		// vector<array<int, 3>> circles = houghCircle(threshold, gradientFrame, 0, 500, 160, 0);
-		// for(int i = 0; i < circles.size(); i++) {
-		// 	cv::circle(frame, cv::Point(circles[i][1], circles[i][0]), circles[i][2], cv::Scalar(255, 0, 0), 5);
-		// }
-		vector<array<int, 2>> lines = houghLines(threshold, 170);
-		for(int i = 0; i < lines.size(); i++) {
-			array<cv::Point, 2> points = lineToPoints(lines[i], 0, frame.cols - 1);
-			cv::line(frame, points[0], points[1], cv::Scalar(255, 0, 0), 5);
+		cv::Mat suppression = nonMaxSuppression(sobelFrame, gradientFrame);
+		cv::Mat threshold = doubleThreshold(suppression, 40, 70);
+		cv::Mat edges = hysterise(threshold);
+		vector<array<int, 3>> circles = houghCircle(edges, gradientFrame, 0, 500, 215, 0);
+		for(int i = 0; i < circles.size(); i++) {
+			cv::circle(frame, cv::Point(circles[i][1], circles[i][0]), circles[i][2], cv::Scalar(255, 0, 0), 5);
 		}
-		cv::imwrite("edges.jpg", threshold);
+		// vector<array<int, 2>> lines = houghLines(edges, gradientFrame, 120);
+		// for(int i = 0; i < lines.size(); i++) {
+		// 	array<cv::Point, 2> points = lineToPoints(lines[i], 0, frame.cols - 1);
+		// 	cv::line(frame, points[0], points[1], cv::Scalar(255, 0, 0), 5);
+		// }
+		// cv::imwrite("edges.jpg", threshold);
 
 
 		// 2. Load the Strong Classifier in a structure called `Cascade'
