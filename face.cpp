@@ -279,6 +279,62 @@ cv::Mat hysterise(cv::Mat frame) {
 	return hyst;
 }
 
+
+vector<array<int, 5>> houghEllipse(cv::Mat edges, cv::Mat gradient, int minRad, int maxRad, unsigned char peakThreshold, int minDistance) {
+	cout << gradient.rows* gradient.cols* (maxRad - minRad)* (maxRad - minRad)* 180 << endl;
+	cv::Mat houghSpace(5, new int[5]{gradient.rows, gradient.cols, maxRad - minRad, maxRad - minRad, 180}, CV_32SC1, cv::Scalar::all(0)); // need +1?
+	// vector<vector<vector<vector<vector<int>>>>> houghSpace(gradient.rows*gradient.cols*(maxRad - minRad)*(maxRad - minRad)*180); 
+ 
+
+	int maxPeak = 0;
+	for(int gY = 5; gY < gradient.rows - 5; gY++) {
+		for(int gX = 5; gX < gradient.cols - 5; gX++) {
+			if(edges.at<uchar>(gY, gX) == 255) {
+				float theta = gradient.at<signed int>(gY, gX);
+				for(int alpha = 0; alpha < 180; alpha++) {
+					for(int rY = minRad; rY <= maxRad; rY++) {
+						for(int rX = minRad; rX <= maxRad; rX++) {
+							int a0 = round(gX + rX*cos(theta * CV_PI / 180.0f)*cos(alpha *CV_PI/180.0f) - rY*sin(theta * CV_PI/180.0f)*sin(alpha * CV_PI/180.0f));
+							int b0 = round(gY + rX*cos(theta * CV_PI / 180.0f)*sin(alpha *CV_PI/180.0f) + rY*sin(theta * CV_PI/180.0f)*cos(alpha * CV_PI/180.0f));
+							int a1 = round(gX - (rX*cos(theta * CV_PI / 180.0f)*cos(alpha *CV_PI/180.0f) - rY*sin(theta * CV_PI/180.0f)*sin(alpha * CV_PI/180.0f)));
+							int b1 = round(gY - (rX*cos(theta * CV_PI / 180.0f)*sin(alpha *CV_PI/180.0f) + rY*sin(theta * CV_PI/180.0f)*cos(alpha * CV_PI/180.0f)));
+							// cout << a0 << " " << b0 << endl;
+							if((b0 >= 0 && b0 < gradient.rows) && (a0 >= 0 && a0 < gradient.cols)) {
+								// houghSpace[b0][a0][rY - minRad][rX - minRad][alpha] += 1;
+								if(houghSpace.at<signed int>(new int[5]{b0, a0, rY - minRad, rX - minRad, alpha}) > maxPeak) maxPeak = houghSpace.at<signed int>(new int[5]{b0, a0, rY - minRad, rX - minRad, alpha});
+								// cout << b0 << " " << a0 << endl;
+							}
+							if((b1 >= 0 && b1 < gradient.rows) && (a1 >= 0 && a1 < gradient.cols)) {
+								houghSpace.at<signed int>(new int[5]{b1, a1, rY - minRad, rX - minRad, alpha}) += 1;
+								if(houghSpace.at<signed int>(new int[5]{b1, a1, rY - minRad, rX - minRad, alpha}) > maxPeak) maxPeak = houghSpace.at<signed int>(new int[5]{b1, a1, rY - minRad, rX - minRad, alpha});
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+	//normalize and find peaks
+	vector<array<int, 5>> peaks;
+	for(int b = 0; b < gradient.rows; b++) {
+		for(int a = 0; a < gradient.cols; a++) {
+			for(int alpha = 0; alpha < 180; alpha++) {
+				for(int rY = minRad; rY < maxRad; rY++) {
+					for(int rX = minRad; rX < maxRad; rX++) {
+
+						//normalize
+						houghSpace.at<signed int>(new int[5]{b, a, rY - minRad, rX - minRad, alpha}) *= 255.0f / (float)maxPeak;
+						//find peak
+						if(houghSpace.at<signed int>(new int[5]{b, a, rY - minRad, rX - minRad, alpha}) > peakThreshold) peaks.push_back(array<int, 5>{b, a, rY, rX, alpha});
+					}
+				}
+			}
+		}
+	}
+
+	return peaks;
+}
+
 vector<array<int, 3>> houghCircle(cv::Mat edges, cv::Mat gradient, int minRad, int maxRad, unsigned char peakThreshold, int minDistance) {
 	cv::Mat houghSpace(3, new int[3]{gradient.rows, gradient.cols, maxRad - minRad + 1}, CV_32SC1, cv::Scalar::all(0)); // need +1?
 
@@ -392,9 +448,14 @@ int main( int argc, const char** argv )
 		cv::Mat suppression = nonMaxSuppression(sobelFrame, gradientFrame);
 		cv::Mat threshold = doubleThreshold(suppression, 40, 70);
 		cv::Mat edges = hysterise(threshold);
-		vector<array<int, 3>> circles = houghCircle(edges, gradientFrame, 0, 500, 215, 0);
-		for(int i = 0; i < circles.size(); i++) {
-			cv::circle(frame, cv::Point(circles[i][1], circles[i][0]), circles[i][2], cv::Scalar(255, 0, 0), 5);
+		// vector<array<int, 3>> circles = houghCircle(edges, gradientFrame, 10, 500, 215, 0);
+		// for(int i = 0; i < circles.size(); i++) {
+		// 	cv::circle(frame, cv::Point(circles[i][1], circles[i][0]), circles[i][2], cv::Scalar(255, 0, 0), 5);
+		// }
+
+		vector<array<int, 5>> ellipses = houghEllipse(edges, gradientFrame, 10, 500, 215, 0);
+		for(int i = 0; i < ellipses.size(); i++) {
+			cv::circle(frame, cv::Point(ellipses[i][1], ellipses[i][0]), ellipses[i][2], cv::Scalar(255, 0, 0), 5);
 		}
 		// vector<array<int, 2>> lines = houghLines(edges, gradientFrame, 120);
 		// for(int i = 0; i < lines.size(); i++) {
